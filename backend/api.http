@@ -1,0 +1,76 @@
+@host = http://localhost:8000
+
+### Health Check
+GET {{host}}/api/health
+
+### List All Cards
+GET {{host}}/api/cards
+
+### Validate Pipeline
+POST {{host}}/api/pipeline/validate
+Content-Type: application/json
+
+{
+  "pipeline_id": "test-001",
+  "nodes": [
+    { "id": "load", "type": "data_load", "config": { "source": "sample", "sample_name": "california_housing" } },
+    { "id": "split", "type": "data_split", "config": { "train_ratio": 0.8, "test_ratio": 0.2, "random_seed": 42 } },
+    { "id": "define", "type": "model_define", "config": { "model_type": "linear_regression" } },
+    { "id": "train", "type": "train", "config": { "target_column": "MedHouseVal" } },
+    { "id": "eval", "type": "evaluate", "config": { "metrics": ["mse", "r2"], "target_column": "MedHouseVal" } }
+  ],
+  "edges": [
+    { "source": "load", "target": "split", "source_output": "dataset", "target_input": "dataset" },
+    { "source": "split", "target": "train", "source_output": "train_dataset", "target_input": "train_dataset" },
+    { "source": "define", "target": "train", "source_output": "model_spec", "target_input": "model_spec" },
+    { "source": "train", "target": "eval", "source_output": "trained_model", "target_input": "trained_model" },
+    { "source": "split", "target": "eval", "source_output": "test_dataset", "target_input": "test_dataset" }
+  ]
+}
+
+### Execute Pipeline
+POST {{host}}/api/pipeline/execute
+Content-Type: application/json
+
+{
+  "pipeline_id": "test-001",
+  "nodes": [
+    { "id": "load", "type": "data_load", "config": { "source": "sample", "sample_name": "california_housing" } },
+    { "id": "split", "type": "data_split", "config": { "train_ratio": 0.8, "test_ratio": 0.2, "random_seed": 42 } },
+    { "id": "define", "type": "model_define", "config": { "model_type": "linear_regression" } },
+    { "id": "train", "type": "train", "config": { "target_column": "MedHouseVal" } },
+    { "id": "eval", "type": "evaluate", "config": { "metrics": ["mse", "r2"], "target_column": "MedHouseVal" } }
+  ],
+  "edges": [
+    { "source": "load", "target": "split", "source_output": "dataset", "target_input": "dataset" },
+    { "source": "split", "target": "train", "source_output": "train_dataset", "target_input": "train_dataset" },
+    { "source": "define", "target": "train", "source_output": "model_spec", "target_input": "model_spec" },
+    { "source": "train", "target": "eval", "source_output": "trained_model", "target_input": "trained_model" },
+    { "source": "split", "target": "eval", "source_output": "test_dataset", "target_input": "test_dataset" }
+  ]
+}
+
+### Get Pipeline Status
+GET {{host}}/api/pipeline/test-001/status
+
+### Get Card Output Preview
+GET {{host}}/api/card/test-001/load/output
+
+### Get Card Output Preview (eval)
+GET {{host}}/api/card/test-001/eval/output
+
+### Validate Invalid Pipeline (cycle)
+POST {{host}}/api/pipeline/validate
+Content-Type: application/json
+
+{
+  "pipeline_id": "bad-cycle",
+  "nodes": [
+    { "id": "n1", "type": "data_load", "config": {} },
+    { "id": "n2", "type": "data_split", "config": {} }
+  ],
+  "edges": [
+    { "source": "n1", "target": "n2", "source_output": "dataset", "target_input": "dataset" },
+    { "source": "n2", "target": "n1", "source_output": "train_dataset", "target_input": "dataset" }
+  ]
+}
