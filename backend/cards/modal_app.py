@@ -53,6 +53,8 @@ gpu_image = (
         "transformers",
         "peft",
         "trl",
+        "bitsandbytes>=0.46.1",  # Required for 4-bit quantization
+        "accelerate",  # Required for transformers + bitsandbytes
     )
     .pip_install(
         "torch>=2.0.0",

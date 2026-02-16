@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 import {
   type Node,
   type Edge,
@@ -96,7 +97,8 @@ interface PipelineState {
 }
 
 export const usePipelineStore = create<PipelineState>()(
-  (set, get) => ({
+  persist(
+    (set, get) => ({
     nodes: [],
     edges: [],
     nodeCounter: 0,
@@ -372,5 +374,15 @@ export const usePipelineStore = create<PipelineState>()(
         }),
       };
     },
-  })
+  }),
+  {
+    name: "tensorrag-pipeline-state",
+      // Only persist the board layout; transient execution state stays in memory
+      partialize: (state) => ({
+        nodes: state.nodes,
+        edges: state.edges,
+        nodeCounter: state.nodeCounter,
+      }),
+    }
+  )
 );

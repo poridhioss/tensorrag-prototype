@@ -66,7 +66,17 @@ def _execute_modal(card, config: dict, inputs: dict, storage) -> dict:
     source_code = _get_custom_card_source(card.card_type)
 
     # Choose GPU or CPU function based on card type
-    if card.card_type == "train_gpu":
+    # LLM cards that need GPU: model loading, LoRA, fine-tuning, merging, vLLM serving
+    gpu_card_types = {
+        "train_gpu",
+        "llm_load_model",  # Loading models with quantization needs GPU
+        "llm_apply_lora",  # LoRA setup needs GPU
+        "llm_finetune_lora",  # Fine-tuning needs GPU
+        "llm_merge_export",  # Merging models needs GPU
+        "llm_vllm_serve",  # vLLM serving needs GPU
+    }
+    
+    if card.card_type in gpu_card_types or card.card_type.startswith("llm_"):
         run_card = modal.Function.from_name("tensorrag", "run_card_gpu")
     else:
         run_card = modal.Function.from_name("tensorrag", "run_card")
