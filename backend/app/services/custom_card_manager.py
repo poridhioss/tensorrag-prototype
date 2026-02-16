@@ -40,7 +40,8 @@ class CustomCardManager:
 
     def __init__(self) -> None:
         self._custom_cards: dict[str, dict] = {}
-        self._load_existing()
+        # No longer auto-load on startup — cards are now project-scoped
+        # via workspace_manager. This class is kept for backward compat.
 
     # ------------------------------------------------------------------
     # Public API

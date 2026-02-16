@@ -66,9 +66,16 @@ export function PipelineCanvas() {
     [selectNode, setSelectedNodeIdForOutput, setConsoleActiveTab, setConsoleOpen]
   );
 
+  const isExecuting = usePipelineStore((s) => s.isExecuting);
+
   const onPaneClick = useCallback(() => {
     selectNode(null);
-  }, [selectNode]);
+    setSelectedNodeIdForOutput(null);
+    // Close console panel when deselecting, unless pipeline is running
+    if (!isExecuting) {
+      setConsoleOpen(false);
+    }
+  }, [selectNode, setSelectedNodeIdForOutput, setConsoleOpen, isExecuting]);
 
   const stableNodeTypes = useMemo(() => nodeTypes, []);
 

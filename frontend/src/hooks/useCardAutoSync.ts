@@ -1,9 +1,11 @@
 import { useEffect, useRef } from "react";
-import { uploadCustomCard } from "@/lib/api";
+import { saveProjectCard } from "@/lib/api";
 import { useEditorStore } from "@/store/editorStore";
+import { useWorkspaceStore } from "@/store/workspaceStore";
 
 /**
- * Debounced auto-sync: uploads the active card file 1 second after edits stop.
+ * Debounced auto-sync: saves the active card file to S3 (project-scoped)
+ * 1 second after edits stop.
  */
 export function useCardAutoSync() {
   const cardFiles = useEditorStore((s) => s.cardFiles);
@@ -11,16 +13,18 @@ export function useCardAutoSync() {
   const markFileSaved = useEditorStore((s) => s.markFileSaved);
   const setIsSyncing = useEditorStore((s) => s.setIsSyncing);
 
+  const activeProject = useWorkspaceStore((s) => s.activeProject);
+
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Find the active file's content fingerprint
   const activeFile = cardFiles.find((f) => f.path === activeFilePath);
   const content = activeFile?.content;
   const isDirty = activeFile?.isDirty;
-  const fileName = activeFile?.name;
+  const filePath = activeFile?.path;
 
   useEffect(() => {
-    if (!isDirty || !activeFilePath || !content || !fileName) return;
+    if (!isDirty || !activeFilePath || !content || !filePath || !activeProject) return;
 
     // Clear previous timeout
     if (timeoutRef.current) {
@@ -30,7 +34,7 @@ export function useCardAutoSync() {
     timeoutRef.current = setTimeout(async () => {
       try {
         setIsSyncing(true);
-        await uploadCustomCard(fileName, content);
+        await saveProjectCard(activeProject, filePath, content);
         markFileSaved(activeFilePath);
       } catch {
         // Sync failure is non-critical — file stays dirty for retry
@@ -44,5 +48,5 @@ export function useCardAutoSync() {
         clearTimeout(timeoutRef.current);
       }
     };
-  }, [content, isDirty, activeFilePath, fileName, markFileSaved, setIsSyncing]);
+  }, [content, isDirty, activeFilePath, filePath, activeProject, markFileSaved, setIsSyncing]);
 }

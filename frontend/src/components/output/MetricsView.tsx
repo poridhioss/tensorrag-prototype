@@ -18,12 +18,28 @@ function formatMetric(value: number): string {
 
 export function MetricsView({ preview, pipelineId, nodeId }: MetricsViewProps) {
   const { theme } = useTheme();
-  const metrics = preview.metrics as Record<string, number> | undefined;
   const coefficients = preview.coefficients as
     | Record<string, number>
     | undefined;
   const intercept = preview.intercept as number | undefined;
   const chartRef = preview.chart_ref as string | undefined;
+
+  // Support both wrapped format ({metrics: {...}}) and flat format ({accuracy: 0.96, ...})
+  const knownNonMetricKeys = new Set(["coefficients", "intercept", "chart_ref", "gradient_norms"]);
+  const metrics: Record<string, number> | undefined = preview.metrics
+    ? (preview.metrics as Record<string, number>)
+    : (() => {
+        const flat: Record<string, number> = {};
+        for (const [k, v] of Object.entries(preview)) {
+          if (!knownNonMetricKeys.has(k) && (typeof v === "number" || typeof v === "string")) {
+            flat[k] = typeof v === "number" ? v : Number(v);
+          }
+        }
+        return Object.keys(flat).length > 0 ? flat : undefined;
+      })();
+
+  // Gradient norms from Backward Pass card
+  const gradientNorms = preview.gradient_norms as Record<string, number> | undefined;
   
   const isDark = theme === "dark" || (theme === "system" && typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches);
 
@@ -79,6 +95,26 @@ export function MetricsView({ preview, pipelineId, nodeId }: MetricsViewProps) {
                 <span className="font-mono">{intercept.toFixed(4)}</span>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {gradientNorms && Object.keys(gradientNorms).length > 0 && (
+        <div className="mb-3">
+          <h4 className={`text-[10px] font-semibold uppercase mb-1 ${
+            isDark ? "text-gray-400" : "text-gray-600"
+          }`}>
+            Gradient Norms
+          </h4>
+          <div className={`text-[10px] space-y-0.5 ${
+            isDark ? "text-gray-300" : "text-gray-800"
+          }`}>
+            {Object.entries(gradientNorms).map(([name, norm]) => (
+              <div key={name} className="flex justify-between">
+                <span className="truncate mr-2">{name}</span>
+                <span className="font-mono shrink-0">{typeof norm === "number" ? norm.toFixed(6) : String(norm)}</span>
+              </div>
+            ))}
           </div>
         </div>
       )}

@@ -2,7 +2,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import pipeline, cards, artifacts
+from app.routers import pipeline, cards, artifacts, workspace
 from app.ws.status import ws_manager
 
 app = FastAPI(title="TensorRag", version="0.1.0")
@@ -18,6 +18,7 @@ app.add_middleware(
 app.include_router(pipeline.router, prefix="/api")
 app.include_router(cards.router, prefix="/api")
 app.include_router(artifacts.router, prefix="/api")
+app.include_router(workspace.router, prefix="/api/workspace")
 
 
 @app.get("/api/health")

@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState, useRef } from "react";
 import dynamic from "next/dynamic";
 import { ReactFlowProvider } from "@xyflow/react";
 import { usePipelineStore } from "@/store/pipelineStore";
-import { fetchCards } from "@/lib/api";
+import { useWorkspaceStore } from "@/store/workspaceStore";
 import { Header } from "@/components/header/Header";
 import { CardPalette } from "@/components/sidebar/CardPalette";
 import { PipelineCanvas } from "@/components/canvas/PipelineCanvas";
@@ -25,15 +25,70 @@ const CardEditorView = dynamic(
   }
 );
 
+const PALETTE_MIN = 180;
+const PALETTE_MAX = 400;
+const PALETTE_DEFAULT = 224;
+
 function PipelineApp() {
-  const setCardSchemas = usePipelineStore((s) => s.setCardSchemas);
   const validationErrors = usePipelineStore((s) => s.validationErrors);
   const setValidationErrors = usePipelineStore((s) => s.setValidationErrors);
   const activeView = usePipelineStore((s) => s.activeView);
 
+  const loadProjects = useWorkspaceStore((s) => s.loadProjects);
+  const switchProject = useWorkspaceStore((s) => s.switchProject);
+
+  // Resizable palette
+  const [paletteWidth, setPaletteWidth] = useState(PALETTE_DEFAULT);
+  const [isResizing, setIsResizing] = useState(false);
+  const resizeStartX = useRef(0);
+  const resizeStartWidth = useRef(0);
+
   useEffect(() => {
-    fetchCards().then(setCardSchemas).catch(console.error);
-  }, [setCardSchemas]);
+    if (!isResizing) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const delta = e.clientX - resizeStartX.current;
+      setPaletteWidth(Math.min(PALETTE_MAX, Math.max(PALETTE_MIN, resizeStartWidth.current + delta)));
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+  }, [isResizing]);
+
+  // Load projects on mount and restore active project
+  useEffect(() => {
+    async function init() {
+      await loadProjects();
+
+      // If there was a previously active project (persisted in localStorage),
+      // re-activate it to load its cards and pipeline
+      const persisted = useWorkspaceStore.getState().activeProject;
+      if (persisted) {
+        try {
+          await switchProject(persisted);
+        } catch {
+          // Project may have been deleted — clear it
+          useWorkspaceStore.getState().setActiveProject(null);
+        }
+      }
+    }
+    init();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="h-screen flex flex-col">
@@ -60,7 +115,27 @@ function PipelineApp() {
           )}
 
           <div className="flex-1 flex overflow-hidden relative">
-            <CardPalette />
+            <div
+              className="shrink-0 overflow-hidden"
+              style={{ width: `${paletteWidth}px` }}
+            >
+              <CardPalette />
+            </div>
+
+            {/* Resize handle */}
+            <div
+              onMouseDown={(e) => {
+                e.preventDefault();
+                resizeStartX.current = e.clientX;
+                resizeStartWidth.current = paletteWidth;
+                setIsResizing(true);
+              }}
+              className={`w-1 shrink-0 cursor-col-resize transition-colors relative group
+                ${isResizing ? "bg-accent/50" : "hover:bg-accent/30"}`}
+            >
+              <div className="absolute inset-y-0 -left-1 -right-1" />
+            </div>
+
             <div className="flex-1 flex flex-col overflow-hidden relative">
               <PipelineCanvas />
               <ConsolePanel />

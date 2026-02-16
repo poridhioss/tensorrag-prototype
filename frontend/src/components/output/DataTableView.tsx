@@ -23,9 +23,9 @@ function SimpleTable({
       <table className={`text-[10px] w-full ${isDark ? "text-gray-200" : "text-gray-900"}`}>
         <thead className={isDark ? "bg-gray-800 sticky top-0" : "bg-gray-200 sticky top-0"}>
           <tr>
-            {columns.map((col) => (
+            {columns.map((col, i) => (
               <th
-                key={col.name}
+                key={i}
                 className={`px-2 py-1 text-left font-medium whitespace-nowrap ${isDark ? "text-white" : "text-gray-900"}`}
               >
                 {col.name}
@@ -42,9 +42,9 @@ function SimpleTable({
               key={i} 
               className={`border-t ${isDark ? "border-gray-700 hover:bg-gray-800/50" : "border-gray-300 hover:bg-gray-100"}`}
             >
-              {columns.map((col) => (
+              {columns.map((col, ci) => (
                 <td
-                  key={col.name}
+                  key={ci}
                   className={`px-2 py-0.5 truncate max-w-24 ${isDark ? "text-gray-300" : "text-gray-800"}`}
                 >
                   {row[col.name] !== null && row[col.name] !== undefined
@@ -124,13 +124,39 @@ export function DataTableView({ preview }: DataTableViewProps) {
     );
   }
 
-  // Standard table format
-  const rows = preview.rows as Record<string, unknown>[] | undefined;
-  const columns = preview.columns as
+  // Standard table format — handle both structured and raw preview formats
+  const rawColumns = preview.columns as
     | { name: string; dtype: string }[]
+    | string[]
+    | undefined;
+  const rawRows = preview.rows as
+    | Record<string, unknown>[]
+    | unknown[][]
     | undefined;
   const shape = preview.shape as { rows: number; cols: number } | undefined;
-  const rowCount = preview.row_count as number | undefined;
+  const rowCount = (preview.row_count ?? preview.total_rows) as number | undefined;
+
+  // Normalize columns: plain strings → {name, dtype} objects
+  const columns: { name: string; dtype: string }[] | undefined =
+    rawColumns && rawColumns.length > 0
+      ? typeof rawColumns[0] === "string"
+        ? (rawColumns as string[]).map((name) => ({ name, dtype: "" }))
+        : (rawColumns as { name: string; dtype: string }[])
+      : undefined;
+
+  // Normalize rows: arrays of values → dicts keyed by column name
+  const rows: Record<string, unknown>[] | undefined =
+    rawRows && columns && rawRows.length > 0
+      ? Array.isArray(rawRows[0]) && !("length" in rawRows[0] && typeof rawRows[0] === "object" && !Array.isArray(rawRows[0]))
+        ? (rawRows as unknown[][]).map((row) => {
+            const obj: Record<string, unknown> = {};
+            columns.forEach((col, i) => {
+              obj[col.name] = row[i];
+            });
+            return obj;
+          })
+        : (rawRows as Record<string, unknown>[])
+      : undefined;
 
   return (
     <div>

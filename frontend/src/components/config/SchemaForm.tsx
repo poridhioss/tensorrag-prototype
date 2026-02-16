@@ -145,16 +145,31 @@ function renderField(
 }
 
 export function SchemaForm({ schema, values, onChange }: SchemaFormProps) {
-  if (!schema.properties) return null;
+  // Support both JSON Schema format (with "properties" wrapper) and
+  // flat format where keys are directly on the schema object
+  const properties: Record<string, JsonSchemaProperty> | undefined =
+    schema.properties ??
+    (Object.keys(schema).some(
+      (k) =>
+        !["type", "required", "description", "title", "default"].includes(k)
+    )
+      ? (schema as unknown as Record<string, JsonSchemaProperty>)
+      : undefined);
+
+  if (!properties) return null;
 
   const updateField = (key: string, val: unknown) => {
     onChange({ ...values, [key]: val });
   };
 
+  // Filter out JSON Schema meta-keys when using flat format
+  const schemaMetaKeys = new Set(["type", "required", "description", "title", "default"]);
+
   return (
     <div className="space-y-3">
-      {Object.entries(schema.properties)
-        .filter(([key]) => !key.startsWith("_"))
+      {Object.entries(properties)
+        .filter(([key]) => !key.startsWith("_") && !schemaMetaKeys.has(key))
+        .filter(([, prop]) => prop && typeof prop === "object" && "type" in prop)
         .map(([key, prop]) => (
           <div key={key}>
             {prop.type !== "boolean" && (

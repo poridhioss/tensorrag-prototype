@@ -161,6 +161,7 @@ All `save_*` methods return a string reference (S3 URI). Pass that reference to 
 
 ---
 
+
 ## Complete Examples
 
 ### Example 1: Text Preprocessor
@@ -252,13 +253,15 @@ class AccuracyCard(BaseCard):
 
 ## Workflow
 
-1. Open the **Editor** view (toggle in the header)
-2. Click **New Card** — enter a name
-3. Write your Python code following the template above
-4. Click **Validate** — fix any errors shown
-5. Click **Publish to Board**
-6. Switch to **Board** view — your card appears in the palette
-7. Drag it onto the canvas, connect it, and run
+1. Switch to the **Editor** view (toggle in the header)
+2. **Create a project** — Use the **Project** dropdown at the top of the left sidebar and click **+ New Project**. All cards and pipeline state are scoped to the active project.
+3. (Optional) Click the **folder icon** to create folders for organizing your cards (e.g. `data/`, `training/`, `evaluation/`)
+4. Click **+ (New Card)** — enter a name. If a folder is selected, the card is created inside it.
+5. Write your Python code following the template above
+6. Click **Validate** — fix any errors shown
+7. Click **Publish to Board** — this saves the card to S3 and registers it in the active project
+8. Switch to **Board** view — select the project from the dropdown, your cards appear in the palette
+9. Drag cards onto the canvas, connect them, and run
 
 ## Rules
 

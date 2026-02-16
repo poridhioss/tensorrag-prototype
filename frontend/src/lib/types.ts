@@ -18,7 +18,7 @@ export interface CardSchema {
   card_type: string;
   display_name: string;
   description: string;
-  category: "data" | "model" | "evaluation" | "inference";
+  category: "data" | "model" | "training" | "evaluation" | "inference";
   execution_mode: "local" | "modal";
   config_schema: JsonSchema;
   input_schema: Record<string, string>;
@@ -103,6 +103,23 @@ export interface CustomCardFile {
   filename: string;
   source_code: string;
   card_type: string;
+}
+
+// --- Workspace types ---
+export interface CardFileEntry {
+  path: string;
+  type: "file" | "folder";
+}
+
+export interface RegisteredCardInfo {
+  card_type: string;
+  path: string;
+}
+
+export interface SavedPipelineState {
+  nodes: unknown[];
+  edges: unknown[];
+  nodeCounter: number;
 }
 
 // --- React Flow node data ---

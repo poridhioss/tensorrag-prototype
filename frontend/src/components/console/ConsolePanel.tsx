@@ -207,33 +207,54 @@ export function ConsolePanel() {
         <div className={`flex-1 overflow-y-auto px-4 py-2 pb-8 font-mono text-xs leading-relaxed ${
           isDark ? "text-gray-300" : "text-gray-700"
         }`}>
-          {logEntries.length === 0 && !isExecuting && (
-            <div className={`text-center py-8 ${isDark ? "text-gray-500" : "text-gray-500"}`}>
-              No logs yet. Console output will appear here when you run a pipeline.
-            </div>
-          )}
-          {logEntries.map((entry, i) => (
-            <div
-              key={i}
-              className={
-                entry.text.includes("FAILED") || entry.text.includes("ERROR")
-                  ? "text-red-500"
-                  : entry.text.startsWith("$")
-                    ? "text-green-600"
-                    : isDark
-                      ? "text-gray-300"
-                      : "text-gray-700"
-              }
-            >
-              {entry.text}
-            </div>
-          ))}
-          {isExecuting && (
-            <div className={`flex items-center gap-2 mt-2 ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-              <div className={`w-2 h-2 border border-accent border-t-transparent rounded-full animate-spin`} />
-              <span>executing...</span>
-            </div>
-          )}
+          {(() => {
+            // Filter logs by selected node when one is selected
+            const cardName = selectedNode?.data.cardSchema.display_name;
+            const filteredLogs = cardName
+              ? logEntries.filter(
+                  (e) =>
+                    e.text.includes(`[${cardName}]`) ||
+                    e.text.startsWith("$")
+                )
+              : logEntries;
+
+            if (filteredLogs.length === 0 && !isExecuting) {
+              return (
+                <div className={`text-center py-8 ${isDark ? "text-gray-500" : "text-gray-500"}`}>
+                  {cardName
+                    ? `No logs for ${cardName} yet. Run the card to see output here.`
+                    : "No logs yet. Console output will appear here when you run a pipeline."}
+                </div>
+              );
+            }
+
+            return (
+              <>
+                {filteredLogs.map((entry, i) => (
+                  <div
+                    key={i}
+                    className={
+                      entry.text.includes("FAILED") || entry.text.includes("ERROR")
+                        ? "text-red-500"
+                        : entry.text.startsWith("$")
+                          ? "text-green-600"
+                          : isDark
+                            ? "text-gray-300"
+                            : "text-gray-700"
+                    }
+                  >
+                    {entry.text}
+                  </div>
+                ))}
+                {isExecuting && (
+                  <div className={`flex items-center gap-2 mt-2 ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                    <div className={`w-2 h-2 border border-accent border-t-transparent rounded-full animate-spin`} />
+                    <span>executing...</span>
+                  </div>
+                )}
+              </>
+            );
+          })()}
           <div ref={logBottomRef} />
         </div>
       )}

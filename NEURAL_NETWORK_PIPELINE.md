@@ -8,70 +8,51 @@ Build a complete neural network training pipeline using 9 individual cards. Each
 Data Load → Data Split → Build Model → Forward Pass → Compute Loss → Backward Pass → Optimizer Step → Evaluate → Inference
 ```
 
+## Project File Structure
+
+Create the following folders and files in the **Editor** view:
+
+```
+neural-net-pipeline/          ← Project name
+├── data/                     ← Folder
+│   ├── data_load.py          ← Card 1
+│   └── data_split.py         ← Card 2
+├── model/                    ← Folder
+│   └── build_model.py        ← Card 3
+├── training/                 ← Folder
+│   ├── forward_pass.py       ← Card 4
+│   ├── compute_loss.py       ← Card 5
+│   ├── backward_pass.py      ← Card 6
+│   └── optimizer_step.py     ← Card 7
+├── evaluation/               ← Folder
+│   └── evaluate.py           ← Card 8
+└── inference/                ← Folder
+    └── inference.py          ← Card 9
+```
+
 ## Card Connection Map
 
-| # | Card | Receives from | Sends to |
-|---|------|--------------|----------|
-| 1 | Data Load | — (config: CSV path) | `dataset` |
-| 2 | Data Split | `dataset` | `train_data`, `test_data` |
-| 3 | Build Model | `train_data` | `training_state` |
-| 4 | Forward Pass | `training_state` | `training_state` |
-| 5 | Compute Loss | `training_state` | `training_state` |
-| 6 | Backward Pass | `training_state` | `training_state` |
-| 7 | Optimizer Step | `training_state` | `trained_model` |
-| 8 | Evaluate | `trained_model`, `test_data` | `metrics` |
-| 9 | Inference | `trained_model` | `predictions` |
+| # | Card | File | Folder | Receives from | Sends to |
+|---|------|------|--------|--------------|----------|
+| 1 | Data Load | `data_load.py` | `data/` | — (config: CSV path) | `dataset` |
+| 2 | Data Split | `data_split.py` | `data/` | `dataset` | `train_data`, `test_data` |
+| 3 | Build Model | `build_model.py` | `model/` | `train_data` | `training_state` |
+| 4 | Forward Pass | `forward_pass.py` | `training/` | `training_state` | `training_state` |
+| 5 | Compute Loss | `compute_loss.py` | `training/` | `training_state` | `training_state` |
+| 6 | Backward Pass | `backward_pass.py` | `training/` | `training_state` | `training_state` |
+| 7 | Optimizer Step | `optimizer_step.py` | `training/` | `training_state` | `trained_model` |
+| 8 | Evaluate | `evaluate.py` | `evaluation/` | `trained_model`, `test_data` | `metrics` |
+| 9 | Inference | `inference.py` | `inference/` | `trained_model` | `predictions` |
+
+> **Note:** The executor automatically fills in the real `pipeline_id` and `node_id` for storage calls. Use any placeholder (e.g. `"_p"`, `"_n"`) — they get replaced at runtime.
 
 ---
 
 ## Card 1: Data Load
 
+**File:** `data_load.py` | **Folder:** `data/`
+
 Loads a CSV dataset from a URL or local path.
-
-```python
-from cards.base import BaseCard
-
-class DataLoadCard(BaseCard):
-    card_type = "data_load"
-    display_name = "Data Load"
-    description = "Load a CSV dataset"
-    category = "data"
-    execution_mode = "local"
-    output_view_type = "table"
-
-    config_schema = {
-        "source_url": {
-            "type": "string",
-            "label": "CSV URL or path",
-            "default": "https://raw.githubusercontent.com/mwaskom/seaborn-data/master/iris.csv"
-        }
-    }
-    input_schema = {}
-    output_schema = {"dataset": "dataframe"}
-
-    def execute(self, config, inputs, storage):
-        import pandas as pd
-        df = pd.read_csv(config["source_url"])
-        ref = storage.save_dataframe(
-            storage._key("", "", "", "").split("/")[1],  # pipeline_id from context
-            "", "dataset", df
-        )
-        # Simpler: the executor passes pipeline_id/node_id via storage context
-        ref = storage.save_dataframe(config.get("_pipeline_id", ""), config.get("_node_id", ""), "dataset", df)
-        return {"dataset": ref}
-
-    def get_output_preview(self, outputs, storage):
-        df = storage.load_dataframe(outputs["dataset"])
-        return {
-            "columns": list(df.columns),
-            "rows": df.head(20).values.tolist(),
-            "total_rows": len(df),
-        }
-```
-
-> **Note:** The executor automatically provides `pipeline_id` and `node_id` to the storage calls. Your `execute` method receives a `storage` object already configured — just call `storage.save_dataframe(pipeline_id, node_id, key, data)` where `pipeline_id` and `node_id` come from the execution context.
-
-**Simplified version (recommended):**
 
 ```python
 from cards.base import BaseCard
@@ -109,9 +90,9 @@ class DataLoadCard(BaseCard):
         }
 ```
 
----
-
 ## Card 2: Data Split
+
+**File:** `data_split.py` | **Folder:** `data/`
 
 Splits dataset into train/test sets and separates features (X) from target (y).
 
@@ -191,6 +172,8 @@ class DataSplitCard(BaseCard):
 
 ## Card 3: Build Model
 
+**File:** `build_model.py` | **Folder:** `model/`
+
 Creates a PyTorch neural network architecture and initializes optimizer.
 
 ```python
@@ -268,6 +251,8 @@ class BuildModelCard(BaseCard):
 
 ## Card 4: Forward Pass
 
+**File:** `forward_pass.py` | **Folder:** `training/`
+
 Runs input data through the network to produce predictions.
 
 ```python
@@ -326,6 +311,8 @@ class ForwardPassCard(BaseCard):
 
 ## Card 5: Compute Loss
 
+**File:** `compute_loss.py` | **Folder:** `training/`
+
 Calculates cross-entropy loss between predictions and targets.
 
 ```python
@@ -370,6 +357,8 @@ class ComputeLossCard(BaseCard):
 ---
 
 ## Card 6: Backward Pass
+
+**File:** `backward_pass.py` | **Folder:** `training/`
 
 Computes gradients by running backpropagation. Rebuilds the computational graph (forward + loss) because autograd graphs don't survive JSON serialization.
 
@@ -450,6 +439,8 @@ class BackwardPassCard(BaseCard):
 ---
 
 ## Card 7: Optimizer Step
+
+**File:** `optimizer_step.py` | **Folder:** `training/`
 
 Applies gradients to update model weights. Supports multiple epochs by looping the full forward-backward-step cycle internally.
 
@@ -536,6 +527,8 @@ class OptimizerStepCard(BaseCard):
 
 ## Card 8: Evaluate
 
+**File:** `evaluate.py` | **Folder:** `evaluation/`
+
 Tests the trained model on the held-out test set.
 
 ```python
@@ -597,6 +590,8 @@ class EvaluateCard(BaseCard):
 ---
 
 ## Card 9: Inference
+
+**File:** `inference.py` | **Folder:** `inference/`
 
 Makes predictions on new input data using the trained model.
 
@@ -673,8 +668,40 @@ class InferenceCard(BaseCard):
 
 ## How to Wire It on the Canvas
 
-1. Drag each card onto the canvas in order
-2. Connect the output handles to input handles:
+### Step 1: Create a project and cards (Editor view)
+
+1. Switch to **Editor** view using the toggle in the header
+2. In the left sidebar, click the **Project** dropdown → **+ New Project** → name it `neural-net-pipeline`
+3. Create 5 folders using the **folder icon** (top-right of the Card Files panel):
+   - `data`
+   - `model`
+   - `training`
+   - `evaluation`
+   - `inference`
+4. Create the card files — click a folder to select it, then click **+** to create a new card inside it:
+
+   | Folder | Click + and enter | Creates file |
+   |--------|-------------------|--------------|
+   | `data` | `data_load` | `data/data_load.py` |
+   | `data` | `data_split` | `data/data_split.py` |
+   | `model` | `build_model` | `model/build_model.py` |
+   | `training` | `forward_pass` | `training/forward_pass.py` |
+   | `training` | `compute_loss` | `training/compute_loss.py` |
+   | `training` | `backward_pass` | `training/backward_pass.py` |
+   | `training` | `optimizer_step` | `training/optimizer_step.py` |
+   | `evaluation` | `evaluate` | `evaluation/evaluate.py` |
+   | `inference` | `inference` | `inference/inference.py` |
+
+5. Click each file, replace the template with the card code from the sections above
+6. Click **Validate** on each card to check for errors
+7. Click **Publish to Board** on each card to register it in the project
+
+### Step 2: Build the pipeline (Board view)
+
+1. Switch to **Board** view using the toggle in the header
+2. Select your project from the **Project** dropdown in the left sidebar
+3. Drag each card from the palette onto the canvas in order
+4. Connect the output handles to input handles:
 
 ```
 [Data Load] --dataset--> [Data Split]
@@ -688,14 +715,16 @@ class InferenceCard(BaseCard):
 [Optimizer Step] --trained_model--> [Inference]
 ```
 
-3. Configure:
+5. Configure each card by clicking it and editing the settings in the sidebar:
    - **Data Load**: Set CSV URL (default: Iris dataset)
    - **Data Split**: Set target column name (e.g. `species`) and test ratio
    - **Build Model**: Set hidden layer sizes (e.g. `16,8`) and learning rate
    - **Optimizer Step**: Set number of epochs (e.g. `50`)
    - **Inference**: Set input values for prediction
 
-4. Click **Run** to execute the full pipeline
+6. Click **Run** to execute the full pipeline
+
+> **Note:** Your pipeline canvas and all card files are automatically saved to S3 per-project. Switching projects loads that project's canvas and cards. You can come back to this pipeline anytime by selecting the project from the dropdown.
 
 ## Key Design Decisions
 

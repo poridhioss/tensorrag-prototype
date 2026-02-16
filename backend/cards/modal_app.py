@@ -183,42 +183,80 @@ class MemoryStorage:
 # ---------------------------------------------------------------------------
 
 
+def _instantiate_card(card_type: str, source_code: str | None = None):
+    """Get a card instance, either from registry or by executing source code."""
+    if source_code:
+        # Dynamically load custom card from source code
+        import importlib.util
+        import sys
+
+        from cards.base import BaseCard
+
+        module_name = f"modal_custom_card_{card_type}"
+        sys.modules.pop(module_name, None)
+        spec = importlib.util.spec_from_loader(module_name, loader=None)
+        if spec is None:
+            raise RuntimeError(f"Failed to create module spec for {module_name}")
+        module = importlib.util.module_from_spec(spec)
+        module.__dict__["__builtins__"] = __builtins__
+        exec("from cards.base import BaseCard", module.__dict__)  # noqa: S102
+        exec(source_code, module.__dict__)  # noqa: S102
+        sys.modules[module_name] = module
+
+        for attr_name in dir(module):
+            attr = getattr(module, attr_name)
+            if isinstance(attr, type) and issubclass(attr, BaseCard) and attr is not BaseCard:
+                return attr()
+        raise ValueError(f"No BaseCard subclass found in source for {card_type}")
+    else:
+        from cards.registry import get_card
+        return get_card(card_type)
+
+
 @app.function(image=image, timeout=300)
-def run_card(card_type: str, config: dict, serialized_inputs: dict) -> dict:
+def run_card(
+    card_type: str,
+    config: dict,
+    serialized_inputs: dict,
+    source_code: str | None = None,
+) -> dict:
     """Execute any TensorRag card inside a Modal container (CPU).
 
     Args:
         card_type: Card type string (e.g. "data_load", "train").
         config: Card configuration dict (includes _pipeline_id, _node_id).
         serialized_inputs: {input_name: {"type": str, "data": bytes|dict}}
+        source_code: Optional Python source for custom project cards.
 
     Returns:
         {output_key: {"type": str, "data": bytes|dict, "ext": str}}
     """
-    from cards.registry import get_card
-
     storage = MemoryStorage(serialized_inputs)
-    card = get_card(card_type)
+    card = _instantiate_card(card_type, source_code)
     card.execute(config, storage.input_refs, storage)
     return storage.get_serialized_outputs()
 
 
 @app.function(image=gpu_image, gpu="T4", timeout=600)
-def run_card_gpu(card_type: str, config: dict, serialized_inputs: dict) -> dict:
+def run_card_gpu(
+    card_type: str,
+    config: dict,
+    serialized_inputs: dict,
+    source_code: str | None = None,
+) -> dict:
     """Execute GPU-based TensorRag cards inside a Modal container with GPU.
 
     Args:
         card_type: Card type string (e.g. "train_gpu").
         config: Card configuration dict (includes _pipeline_id, _node_id).
         serialized_inputs: {input_name: {"type": str, "data": bytes|dict}}
+        source_code: Optional Python source for custom project cards.
 
     Returns:
         {output_key: {"type": str, "data": bytes|dict, "ext": str}}
     """
-    from cards.registry import get_card
-
     storage = MemoryStorage(serialized_inputs)
-    card = get_card(card_type)
+    card = _instantiate_card(card_type, source_code)
     card.execute(config, storage.input_refs, storage)
     return storage.get_serialized_outputs()
 

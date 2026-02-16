@@ -29,6 +29,30 @@ def _execute_local(card, config: dict, inputs: dict, storage) -> dict:
     return card.execute(config, inputs, storage)
 
 
+def _get_custom_card_source(card_type: str) -> str | None:
+    """Return source code for a custom project card, or None for built-in cards."""
+    from app.services.workspace_manager import workspace_manager
+
+    if card_type not in workspace_manager._custom_card_types:
+        return None
+
+    project = workspace_manager._registered_project
+    if not project:
+        return None
+
+    # Find the source file for this card_type
+    for entry in workspace_manager.list_card_files(project):
+        if entry["type"] != "file":
+            continue
+        try:
+            source = workspace_manager.get_card_source(project, entry["path"])
+            if workspace_manager._extract_card_type(source) == card_type:
+                return source
+        except Exception:
+            continue
+    return None
+
+
 def _execute_modal(card, config: dict, inputs: dict, storage) -> dict:
     """Execute a card on Modal, passing data by value."""
     import modal
@@ -38,16 +62,17 @@ def _execute_modal(card, config: dict, inputs: dict, storage) -> dict:
     # Serialize inputs from local storage → bytes/dicts
     serialized = serialize_inputs(card.input_schema, inputs, storage)
 
+    # For custom project cards, send source code so Modal can instantiate them
+    source_code = _get_custom_card_source(card.card_type)
+
     # Choose GPU or CPU function based on card type
     if card.card_type == "train_gpu":
-        # Use GPU function for GPU-based training
         run_card = modal.Function.from_name("tensorrag", "run_card_gpu")
     else:
-        # Use CPU function for other cards
         run_card = modal.Function.from_name("tensorrag", "run_card")
 
     # Dispatch to Modal
-    modal_result = run_card.remote(card.card_type, config, serialized)
+    modal_result = run_card.remote(card.card_type, config, serialized, source_code)
 
     # Deserialize outputs from Modal → local storage
     return deserialize_outputs(

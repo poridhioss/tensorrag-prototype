@@ -2,7 +2,8 @@
 
 import { useEditorStore } from "@/store/editorStore";
 import { usePipelineStore } from "@/store/pipelineStore";
-import { uploadCustomCard, fetchCards } from "@/lib/api";
+import { useWorkspaceStore } from "@/store/workspaceStore";
+import { saveProjectCard, activateProject } from "@/lib/api";
 import {
   CheckCircle2,
   XCircle,
@@ -19,6 +20,7 @@ export function ValidationPanel() {
   const validationResult = useEditorStore((s) => s.validationResult);
   const setCardSchemas = usePipelineStore((s) => s.setCardSchemas);
   const setActiveView = usePipelineStore((s) => s.setActiveView);
+  const activeProject = useWorkspaceStore((s) => s.activeProject);
 
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishStatus, setPublishStatus] = useState<string | null>(null);
@@ -26,17 +28,18 @@ export function ValidationPanel() {
   const activeFile = cardFiles.find((f) => f.path === activeFilePath);
 
   async function handlePublish() {
-    if (!activeFile || !validationResult?.success) return;
+    if (!activeFile || !validationResult?.success || !activeProject) return;
 
     setIsPublishing(true);
     setPublishStatus(null);
 
     try {
-      await uploadCustomCard(activeFile.name, activeFile.content);
+      // Save the card file to the project in S3
+      await saveProjectCard(activeProject, activeFile.path, activeFile.content);
 
-      // Refresh card schemas so the palette picks up the new card
-      const schemas = await fetchCards();
-      setCardSchemas(schemas);
+      // Re-activate the project to register all cards (including the new/updated one)
+      const result = await activateProject(activeProject);
+      setCardSchemas(result.cards);
 
       setPublishStatus("success");
 
@@ -54,7 +57,7 @@ export function ValidationPanel() {
   }
 
   return (
-    <aside className="w-72 border-l border-border bg-bg-secondary shrink-0 flex flex-col overflow-hidden">
+    <aside className="h-full bg-bg-secondary flex flex-col overflow-hidden">
       {/* Header */}
       <div className="px-3 py-2.5 border-b border-border">
         <h2 className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
@@ -179,7 +182,7 @@ export function ValidationPanel() {
             {/* Publish button */}
             <button
               onClick={handlePublish}
-              disabled={isPublishing}
+              disabled={isPublishing || !activeProject}
               className="mt-4 w-full flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium rounded bg-status-completed text-white hover:bg-status-completed/90 disabled:opacity-50 transition-colors"
             >
               {isPublishing ? (
@@ -189,6 +192,12 @@ export function ValidationPanel() {
               )}
               {isPublishing ? "Publishing..." : "Publish to Board"}
             </button>
+
+            {!activeProject && (
+              <p className="text-[10px] text-status-running text-center mt-2">
+                Select a project first to publish.
+              </p>
+            )}
 
             {publishStatus === "success" && (
               <p className="text-[10px] text-status-completed text-center mt-2">

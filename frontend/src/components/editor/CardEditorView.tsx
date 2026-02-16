@@ -1,16 +1,26 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import Editor from "@monaco-editor/react";
 import { useTheme } from "next-themes";
 import { useEditorStore } from "@/store/editorStore";
-import { listCustomCards } from "@/lib/api";
+import { useWorkspaceStore } from "@/store/workspaceStore";
+import { listProjectCards, getCardSource } from "@/lib/api";
 import { setupBaseCardIntelliSense } from "@/lib/services/monacoCardIntelliSense";
 import { useCardAutoSync } from "@/hooks/useCardAutoSync";
 import { CardFileTree } from "./CardFileTree";
 import { EditorToolbar } from "./EditorToolbar";
 import { ValidationPanel } from "./ValidationPanel";
 import type { CardFile } from "@/store/editorStore";
+
+const LEFT_MIN = 160;
+const LEFT_MAX = 400;
+const LEFT_DEFAULT = 208;
+const RIGHT_MIN = 200;
+const RIGHT_MAX = 480;
+const RIGHT_DEFAULT = 288;
+
+type ResizeTarget = "left" | "right" | null;
 
 export function CardEditorView() {
   const { theme } = useTheme();
@@ -22,8 +32,17 @@ export function CardEditorView() {
   const setIsLoadingFiles = useEditorStore((s) => s.setIsLoadingFiles);
   const isLoadingFiles = useEditorStore((s) => s.isLoadingFiles);
 
+  const activeProject = useWorkspaceStore((s) => s.activeProject);
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const editorRef = useRef<any>(null);
+
+  // Resizable panel widths
+  const [leftWidth, setLeftWidth] = useState(LEFT_DEFAULT);
+  const [rightWidth, setRightWidth] = useState(RIGHT_DEFAULT);
+  const [resizeTarget, setResizeTarget] = useState<ResizeTarget>(null);
+  const resizeStartX = useRef(0);
+  const resizeStartWidth = useRef(0);
 
   const isDark =
     theme === "dark" ||
@@ -36,30 +55,91 @@ export function CardEditorView() {
   // Auto-sync hook
   useCardAutoSync();
 
-  // Load custom card files on mount
+  // Resize handlers
   useEffect(() => {
+    if (!resizeTarget) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const delta = e.clientX - resizeStartX.current;
+
+      if (resizeTarget === "left") {
+        const newWidth = Math.min(LEFT_MAX, Math.max(LEFT_MIN, resizeStartWidth.current + delta));
+        setLeftWidth(newWidth);
+      } else {
+        // For the right panel, dragging left makes it bigger
+        const newWidth = Math.min(RIGHT_MAX, Math.max(RIGHT_MIN, resizeStartWidth.current - delta));
+        setRightWidth(newWidth);
+      }
+    };
+
+    const handleMouseUp = () => {
+      setResizeTarget(null);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+  }, [resizeTarget]);
+
+  function startResize(target: "left" | "right", e: React.MouseEvent) {
+    e.preventDefault();
+    resizeStartX.current = e.clientX;
+    resizeStartWidth.current = target === "left" ? leftWidth : rightWidth;
+    setResizeTarget(target);
+  }
+
+  // Load card files from active project
+  useEffect(() => {
+    if (!activeProject) {
+      setCardFiles([]);
+      return;
+    }
+
     let cancelled = false;
 
     async function loadFiles() {
       setIsLoadingFiles(true);
       try {
-        const customCards = await listCustomCards();
+        const entries = await listProjectCards(activeProject!);
         if (cancelled) return;
 
-        const files: CardFile[] = customCards.map((c) => ({
-          name: c.filename,
-          path: c.filename,
-          content: c.source_code,
-          language: "python" as const,
-          isDirty: false,
-        }));
+        const files: CardFile[] = entries
+          .filter((e) => e.type === "file" && e.path.endsWith(".py"))
+          .map((e) => {
+            const name = e.path.split("/").pop() || e.path;
+            return {
+              name,
+              path: e.path,
+              content: "",
+              language: "python" as const,
+              isDirty: false,
+            };
+          });
 
-        setCardFiles(files);
-        if (files.length > 0 && !activeFilePath) {
-          setActiveFilePath(files[0].path);
-        }
+        const folderKeeps: CardFile[] = entries
+          .filter((e) => e.type === "folder")
+          .map((e) => ({
+            name: ".keep",
+            path: `${e.path}/.keep`,
+            content: "",
+            language: "python" as const,
+            isDirty: false,
+          }));
+
+        setCardFiles([...files, ...folderKeeps]);
+        setActiveFilePath(null);
       } catch {
-        // Backend not reachable — start with empty file list
+        if (!cancelled) setCardFiles([]);
       } finally {
         if (!cancelled) setIsLoadingFiles(false);
       }
@@ -69,13 +149,39 @@ export function CardEditorView() {
     return () => {
       cancelled = true;
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeProject]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Lazy-load card source when user selects a file with empty content
+  useEffect(() => {
+    if (!activeFilePath || !activeProject) return;
+    const file = cardFiles.find((f) => f.path === activeFilePath);
+    if (!file || file.content !== "" || file.isDirty) return;
+
+    let cancelled = false;
+
+    async function loadSource() {
+      try {
+        const result = await getCardSource(activeProject!, activeFilePath!);
+        if (cancelled) return;
+        const current = useEditorStore.getState().cardFiles;
+        useEditorStore.getState().setCardFiles(
+          current.map((f) =>
+            f.path === activeFilePath ? { ...f, content: result.source_code } : f
+          )
+        );
+      } catch {
+        // File source fetch failed — leave empty
+      }
+    }
+
+    loadSource();
+    return () => { cancelled = true; };
+  }, [activeFilePath, activeProject]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleEditorDidMount = useCallback((editor: any, monaco: any) => {
     editorRef.current = editor;
 
-    // Define custom theme
     monaco.editor.defineTheme("tensorrag-dark", {
       base: "vs-dark",
       inherit: true,
@@ -110,14 +216,10 @@ export function CardEditorView() {
       },
     });
 
-    // Set up BaseCard IntelliSense
     setupBaseCardIntelliSense(monaco);
-
-    // Apply theme
     monaco.editor.setTheme(isDark ? "tensorrag-dark" : "tensorrag-light");
   }, [isDark]);
 
-  // Update theme when it changes
   useEffect(() => {
     if (editorRef.current) {
       const monaco = (window as any).monaco; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -137,11 +239,26 @@ export function CardEditorView() {
     <div className="flex-1 flex flex-col overflow-hidden">
       <EditorToolbar />
 
-      <div className="flex-1 flex overflow-hidden relative">
-        <CardFileTree />
+      <div className="flex-1 flex overflow-hidden">
+        {/* Left panel: file tree */}
+        <div
+          className="shrink-0 border-r border-border overflow-hidden"
+          style={{ width: `${leftWidth}px` }}
+        >
+          <CardFileTree />
+        </div>
 
-        {/* Editor panel */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Left resize handle */}
+        <div
+          onMouseDown={(e) => startResize("left", e)}
+          className={`w-1 shrink-0 cursor-col-resize transition-colors relative group
+            ${resizeTarget === "left" ? "bg-accent/50" : "hover:bg-accent/30"}`}
+        >
+          <div className="absolute inset-y-0 -left-1 -right-1" />
+        </div>
+
+        {/* Center panel: editor */}
+        <div className="flex-1 flex flex-col overflow-hidden min-w-0">
           {activeFile ? (
             <Editor
               height="100%"
@@ -199,14 +316,31 @@ export function CardEditorView() {
                 <p className="text-sm">
                   {isLoadingFiles
                     ? "Loading card files..."
-                    : "Create or select a card file to start editing"}
+                    : !activeProject
+                      ? "Select a project to start editing"
+                      : "Create or select a card file to start editing"}
                 </p>
               </div>
             </div>
           )}
         </div>
 
-        <ValidationPanel />
+        {/* Right resize handle */}
+        <div
+          onMouseDown={(e) => startResize("right", e)}
+          className={`w-1 shrink-0 cursor-col-resize transition-colors relative group
+            ${resizeTarget === "right" ? "bg-accent/50" : "hover:bg-accent/30"}`}
+        >
+          <div className="absolute inset-y-0 -left-1 -right-1" />
+        </div>
+
+        {/* Right panel: validation */}
+        <div
+          className="shrink-0 border-l border-border overflow-hidden"
+          style={{ width: `${rightWidth}px` }}
+        >
+          <ValidationPanel />
+        </div>
       </div>
     </div>
   );
